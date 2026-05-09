@@ -14,7 +14,7 @@ A hyperlink to worlds unknown,
 Where every coder finds their own.
 
 ### Images of Hope 
-![GitHub Logo](https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png) 
+<img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub Logo" width="64" /> 
 
 An image speaks a thousand lines, in Markdown, it perfectly aligns.
 
