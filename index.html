@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub Changelog Crawl</title>
+    <style>
+      :root {
+        --crawl-yellow: #ffe81f;
+        --space-black: #000;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: "Arial", sans-serif;
+        background: var(--space-black);
+        color: var(--crawl-yellow);
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      body::before {
+        background-image:
+          radial-gradient(1px 1px at 15% 20%, #fff 60%, transparent 61%),
+          radial-gradient(1px 1px at 70% 10%, #fff 60%, transparent 61%),
+          radial-gradient(1px 1px at 40% 40%, #fff 60%, transparent 61%),
+          radial-gradient(1px 1px at 85% 60%, #fff 60%, transparent 61%),
+          radial-gradient(1.5px 1.5px at 25% 75%, #fff 60%, transparent 61%),
+          radial-gradient(1px 1px at 60% 80%, #fff 60%, transparent 61%),
+          radial-gradient(1px 1px at 10% 55%, #fff 60%, transparent 61%),
+          radial-gradient(1px 1px at 50% 25%, #fff 60%, transparent 61%),
+          radial-gradient(1.5px 1.5px at 90% 35%, #fff 60%, transparent 61%),
+          radial-gradient(1px 1px at 35% 90%, #fff 60%, transparent 61%);
+        opacity: 0.9;
+      }
+
+      body::after {
+        background: linear-gradient(to bottom, #000 0%, transparent 12%, transparent 85%, #000 100%);
+      }
+
+      .scene {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        perspective: 450px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+      }
+
+      .crawl {
+        width: min(80vw, 900px);
+        height: 100vh;
+        overflow: hidden;
+        transform-origin: 50% 100%;
+        transform: rotateX(24deg);
+      }
+
+      .crawl-content {
+        font-size: clamp(1.3rem, 2.4vw, 2.2rem);
+        font-weight: 700;
+        text-align: justify;
+        line-height: 1.45;
+        letter-spacing: 0.06em;
+        display: flex;
+        flex-direction: column;
+        animation: crawl-loop 38s linear infinite;
+        will-change: transform;
+      }
+
+      .crawl-content.paused {
+        animation-play-state: paused;
+      }
+
+      .crawl-copy {
+        flex: 0 0 auto;
+        padding-bottom: 2rem;
+      }
+
+      .intro {
+        text-align: center;
+        margin-bottom: 1.4rem;
+      }
+
+      .title {
+        text-align: center;
+        font-size: 1.25em;
+        margin: 1.2rem 0;
+      }
+
+      .meta {
+        text-align: center;
+        margin-bottom: 2rem;
+        font-size: 0.75em;
+        opacity: 0.9;
+      }
+
+      p {
+        margin: 1rem 0;
+      }
+
+      .small {
+        font-size: 0.7em;
+        text-align: center;
+        opacity: 0.85;
+      }
+
+      .audio-controls {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 10;
+      }
+
+      .theme-button {
+        background: transparent;
+        color: var(--crawl-yellow);
+        border: 2px solid var(--crawl-yellow);
+        padding: 0.55rem 0.9rem;
+        font-size: 0.95rem;
+        cursor: pointer;
+      }
+
+      .theme-button:hover {
+        background: rgba(255, 232, 31, 0.15);
+      }
+
+      @keyframes crawl-loop {
+        0% {
+          transform: translateY(0);
+        }
+        100% {
+          transform: translateY(-50%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="audio-controls">
+      <button id="audio-toggle" class="theme-button" type="button">Play Theme</button>
+    </div>
+
+    <main class="scene">
+      <section class="crawl">
+        <article class="crawl-content" id="crawl-text">
+          <div class="crawl-copy">
+            <p class="intro">In a repo far, far, far, far away ...</p>
+            <p>Scanning the galactic log transmissions.</p>
+          </div>
+          <div class="crawl-copy" aria-hidden="true">
+            <p class="intro">In a repo far, far away ...</p>
+            <p>Scanning the galactic log transmissions.</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <audio id="theme-audio" loop preload="none"></audio>
+
+    <script>
+      const FEED_URL = "https://github.blg/changelog/feed";
+      const FALLBACK_FEED_URL = "https://github.blog/changelog/feed";
+      // Public demo MP3 source; replace with any licensed track you prefer.
+      const THEME_AUDIO_URL = "https://samplelib.com/mp3/sample-15s.mp3";
+      const crawlText = document.getElementById("crawl-text");
+      const themeAudio = document.getElementById("theme-audio");
+      const audioToggle = document.getElementById("audio-toggle");
+      let isPlaying = false;
+      let isEscapeStopped = false;
+
+      if (THEME_AUDIO_URL) {
+        themeAudio.src = THEME_AUDIO_URL;
+      } else {
+        audioToggle.disabled = true;
+        audioToggle.textContent = "Add THEME_AUDIO_URL";
+      }
+
+      function stripHtml(input) {
+        const div = document.createElement("div");
+        div.innerHTML = input || "";
+        return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
+      }
+
+      function renderCrawl({ title, date, description, link }) {
+        const storyMarkup = `
+          <p class="intro">In a repo far, far, far away ...</p>
+          <p class="title">${title || "Unknown Transmission"}</p>
+          <p class="meta">${date || "Stardate who cares"}</p>
+          <p>${description || "No details were found in this transmission."}</p>
+          <p class="small">Source: <a href="${link || FEED_URL}" target="_blank" rel="noopener noreferrer">${link || FEED_URL}</a></p>
+        `;
+        crawlText.innerHTML = `
+          <div class="crawl-copy">${storyMarkup}</div>
+          <div class="crawl-copy" aria-hidden="true">${storyMarkup}</div>
+        `;
+        if (isEscapeStopped) {
+          crawlText.classList.add("paused");
+        } else {
+          crawlText.classList.remove("paused");
+        }
+      }
+
+      function renderError(message) {
+        renderCrawl({
+          title: "Transmission Lost",
+          date: "The hyperspace feed could not be reached.",
+          description: message,
+          link: FEED_URL,
+        });
+      }
+
+      async function fetchFeed(url) {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Feed request failed with status ${response.status}.`);
+        }
+        return response.text();
+      }
+
+      async function loadLatestEntry() {
+        try {
+          let xmlText;
+          let sourceUrl = FEED_URL;
+          try {
+            xmlText = await fetchFeed(FEED_URL);
+          } catch {
+            xmlText = await fetchFeed(FALLBACK_FEED_URL);
+            sourceUrl = FALLBACK_FEED_URL;
+          }
+          const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+
+          const parserError = xml.querySelector("parsererror");
+          if (parserError) {
+            throw new Error("Feed response was not valid XML.");
+          }
+
+          const item = xml.querySelector("item");
+          if (!item) {
+            throw new Error("No changelog entries were found.");
+          }
+
+          const title = item.querySelector("title")?.textContent?.trim();
+          const date = item.querySelector("pubDate")?.textContent?.trim();
+          const descriptionRaw = item.querySelector("description")?.textContent?.trim() || "";
+          const description = stripHtml(descriptionRaw);
+          const link = item.querySelector("link")?.textContent?.trim();
+
+          renderCrawl({ title, date, description, link: link || sourceUrl });
+        } catch (error) {
+          renderError(error.message || "Unknown error while reading the feed.");
+        }
+      }
+
+      async function toggleThemeAudio() {
+        if (!THEME_AUDIO_URL) return;
+
+        if (isPlaying) {
+          themeAudio.pause();
+          isPlaying = false;
+          audioToggle.textContent = "Play Theme";
+          return;
+        }
+
+        try {
+          await themeAudio.play();
+          isPlaying = true;
+          audioToggle.textContent = "Pause Theme";
+        } catch {
+          audioToggle.textContent = "Click to Play Theme";
+        }
+      }
+
+      audioToggle.addEventListener("click", toggleThemeAudio);
+      themeAudio.addEventListener("error", () => {
+        isPlaying = false;
+        audioToggle.textContent = "Audio Unavailable";
+        audioToggle.disabled = true;
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        isEscapeStopped = true;
+        crawlText.classList.add("paused");
+        themeAudio.pause();
+        isPlaying = false;
+        if (THEME_AUDIO_URL) {
+          audioToggle.textContent = "Play Theme";
+        }
+      });
+      loadLatestEntry();
+    </script>
+  </body>
+</html>
